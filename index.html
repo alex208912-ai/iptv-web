@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#1F1F1F">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="IPTV">
+    <title>IPTV Player</title>
+
+    <!-- Manifest PWA -->
+    <link rel="manifest" href="manifest.json">
+
+    <!-- Iconos -->
+    <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+    <link rel="icon" type="image/png" sizes="512x512" href="icons/icon-512.png">
+    <link rel="apple-touch-icon" href="icons/icon-192.png">
+
+    <!-- HLS.js para reproducir streams .m3u8 -->
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.15"></script>
+
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        html, body {
+            background: #121212;
+            color: #FFFFFF;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* Pantalla de lista de canales */
+        #list-screen {
+            padding: 16px;
+            padding-top: max(16px, env(safe-area-inset-top));
+            padding-bottom: max(16px, env(safe-area-inset-bottom));
+        }
+
+        .header {
+            background: #1F1F1F;
+            padding: 20px 16px;
+            border-radius: 8px;
+            margin-bottom: 16px;
+        }
+
+        .title {
+            font-size: 24px;
+            font-weight: bold;
+            color: #FFFFFF;
+        }
+
+        .subtitle {
+            font-size: 13px;
+            color: #888;
+            margin-top: 4px;
+        }
+
+        .category-header {
+            font-size: 14px;
+            font-weight: bold;
+            color: #3399FF;
+            text-transform: uppercase;
+            margin: 20px 8px 10px;
+            letter-spacing: 1px;
+        }
+
+        .channel-item {
+            background: #1F1F1F;
+            padding: 18px 20px;
+            margin-bottom: 8px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            border: 2px solid transparent;
+        }
+
+        .channel-item:hover,
+        .channel-item:focus {
+            background: #0066CC;
+            border-color: #3399FF;
+            outline: none;
+            transform: translateY(-1px);
+        }
+
+        .channel-item:active {
+            background: #004499;
+            transform: translateY(0);
+        }
+
+        .channel-name {
+            font-size: 17px;
+            font-weight: bold;
+            color: #FFFFFF;
+        }
+
+        .channel-group {
+            font-size: 12px;
+            color: #CCC;
+            margin-top: 4px;
+        }
+
+        /* Pantalla del reproductor */
+        #player-screen {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: #000;
+            z-index: 1000;
+        }
+
+        #player-screen.active {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .player-header {
+            background: rgba(0,0,0,0.7);
+            padding: 12px 16px;
+            padding-top: max(12px, env(safe-area-inset-top));
+            display: flex;
+            align-items: center;
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            z-index: 10;
+            opacity: 1;
+            transition: opacity 0.3s;
+        }
+
+        .player-header.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .back-btn {
+            background: transparent;
+            border: none;
+            color: white;
+            font-size: 24px;
+            cursor: pointer;
+            padding: 8px 12px;
+            border-radius: 8px;
+        }
+
+        .back-btn:hover {
+            background: rgba(255,255,255,0.15);
+        }
+
+        .player-title {
+            font-size: 16px;
+            font-weight: bold;
+            margin-left: 8px;
+        }
+
+        #video-player {
+            width: 100%;
+            height: 100%;
+            background: #000;
+        }
+
+        .loading {
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            font-size: 16px;
+        }
+
+        .error-msg {
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            color: #ff6b6b;
+            font-size: 14px;
+            text-align: center;
+            padding: 20px;
+        }
+
+        /* Banner de instalación */
+        #install-banner {
+            display: none;
+            position: fixed;
+            bottom: 0; left: 0; right: 0;
+            background: #0066CC;
+            padding: 12px 16px;
+            padding-bottom: max(12px, env(safe-area-inset-bottom));
+            text-align: center;
+            font-size: 13px;
+            z-index: 100;
+        }
+
+        #install-banner button {
+            background: white;
+            color: #0066CC;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-weight: bold;
+            margin-left: 8px;
+            cursor: pointer;
+        }
+
+        #install-banner .close {
+            background: transparent;
+            color: white;
+            border: 1px solid rgba(255,255,255,0.5);
+            padding: 8px 12px;
+            margin-left: 8px;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Pantalla 1: Lista de canales -->
+    <div id="list-screen">
+        <div class="header">
+            <div class="title" id="header-title">Canales</div>
+            <div class="subtitle">Toca un canal para reproducirlo</div>
+        </div>
+        <div id="channels-container">
+            <div style="text-align:center;padding:40px;color:#888">Cargando canales...</div>
+        </div>
+    </div>
+
+    <!-- Pantalla 2: Reproductor -->
+    <div id="player-screen">
+        <div class="player-header" id="player-header">
+            <button class="back-btn" id="back-btn">←</button>
+            <div class="player-title" id="player-title"></div>
+        </div>
+        <video id="video-player" controls playsinline autoplay></video>
+        <div class="loading" id="loading-msg" style="display:none">Cargando...</div>
+        <div class="error-msg" id="error-msg" style="display:none"></div>
+    </div>
+
+    <!-- Banner de instalación PWA -->
+    <div id="install-banner">
+        <span>📲 Instala esta app en tu dispositivo</span>
+        <button id="install-btn">Instalar</button>
+        <button class="close" id="close-banner">×</button>
+    </div>
+
+    <script src="crypto.js"></script>
+    <script src="app.js"></script>
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('sw.js')
+                    .catch(err => console.log('SW error:', err));
+            });
+        }
+    </script>
+</body>
+</html>
